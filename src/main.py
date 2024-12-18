@@ -74,7 +74,7 @@ def main(page: ft.Page):
         page.update()
     
     def ai_response(message_to_ai):
-        response = model.generate_content(message_to_ai)
+        response = ai_chat.send_message(message_to_ai)
         page.pubsub.send_all(Message(user="AI", text=response.text, message_type="chat_message"))
 
     def join_click(e):
@@ -91,17 +91,17 @@ def main(page: ft.Page):
                     message_type="login_message")
             )
             page.update()
-        print(join_dialog.open)
 
     # AIの初期化
     GOOGLE_API_KEY=os.environ['API_KEY']
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
+    ai_chat = model.start_chat(history=[])
 
-    # 同期？
+    # pubsubでイベントが発行されるとon_messageが呼ばれる
     page.pubsub.subscribe(on_message)
         
-    # 入室時のダイアログ
+    # --- 入室時のダイアログ ---
     user_name = ft.TextField(label="Enter your name", autofocus=True, on_submit=join_click)
       
     join_dialog = ft.AlertDialog(
@@ -114,6 +114,7 @@ def main(page: ft.Page):
     )
 
     page.overlay.append(join_dialog)
+    # ------
 
     # メインのチャットページ
     new_text = ft.TextField(shift_enter=True, on_submit=send_text)
