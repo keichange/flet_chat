@@ -1,4 +1,9 @@
 import flet as ft
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
+
+load_dotenv()
 
 class Message():
     def __init__(self, user: str, text: str, message_type: str):
@@ -19,7 +24,12 @@ class ChatMessage(ft.Row):
             ft.Column(
                 [
                     ft.Text(message.user, weight="bold"),
-                    ft.Text(message.text, selectable=True),
+                    ft.Markdown(
+                        message.text,
+                        code_style_sheet=ft.MarkdownStyleSheet.codeblock_alignment,
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                        ),
                 ],
                 tight=True,
                 spacing=5
@@ -57,12 +67,15 @@ def main(page: ft.Page):
         chat.controls.append(m)
         page.update()
 
-    page.pubsub.subscribe(on_message)
-
     def send_text(e):
         page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
+        ai_response(new_text.value)
         new_text.value = ""
-        page.update()   
+        page.update()
+    
+    def ai_response(message_to_ai):
+        response = model.generate_content(message_to_ai)
+        page.pubsub.send_all(Message(user="AI", text=response.text, message_type="chat_message"))
 
     def join_click(e):
         if not user_name.value:
@@ -79,7 +92,16 @@ def main(page: ft.Page):
             )
             page.update()
         print(join_dialog.open)
+
+    # AIの初期化
+    GOOGLE_API_KEY=os.environ['API_KEY']
+    genai.configure(api_key=GOOGLE_API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+
+    # 同期？
+    page.pubsub.subscribe(on_message)
         
+    # 入室時のダイアログ
     user_name = ft.TextField(label="Enter your name", autofocus=True, on_submit=join_click)
       
     join_dialog = ft.AlertDialog(
@@ -92,6 +114,8 @@ def main(page: ft.Page):
     )
 
     page.overlay.append(join_dialog)
+
+    # メインのチャットページ
     new_text = ft.TextField(shift_enter=True, on_submit=send_text)
     chat = ft.ListView(
         expand=True,
