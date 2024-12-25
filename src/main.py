@@ -4,61 +4,27 @@ import asyncio
 from dotenv import load_dotenv
 import google.generativeai as genai
 
+from models.message import Message
+from components.chat_message import ChatMessage
+
 load_dotenv()
 
-class Message():
-    def __init__(self, user: str, text: str, message_type: str):
-        self.user = user
-        self.text = text
-        self.message_type = message_type
-
-class ChatMessage(ft.Row):
-    def __init__(self, message: Message):
-        super().__init__()
-        self.vertical_alignment=ft.CrossAxisAlignment.START
-        self.controls=[
-            ft.CircleAvatar(
-                content=ft.Text(self.get_initials(message.user)),
-                color=ft.Colors.WHITE,
-                bgcolor=self.get_avatar_color(message.user),
-            ),
-            ft.Column(
-                [
-                    ft.Text(message.user, weight="bold"),
-                    ft.Markdown(
-                        message.text,
-                        code_style_sheet=ft.MarkdownStyleSheet.codeblock_alignment,
-                        selectable=True,
-                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
-                        ),
-                ],
-                tight=True,
-                spacing=5
-            ),
-        ]
-
-    def get_initials(self, user_name: str):
-        return user_name[:1].capitalize()
-    
-    def get_avatar_color(self, user_name: str):
-        colors_lookup = [
-            ft.Colors.AMBER,
-            ft.Colors.BLUE,
-            ft.Colors.BROWN,
-            ft.Colors.CYAN,
-            ft.Colors.GREEN,
-            ft.Colors.INDIGO,
-            ft.Colors.LIME,
-            ft.Colors.ORANGE,
-            ft.Colors.PINK,
-            ft.Colors.PURPLE,
-            ft.Colors.RED,
-            ft.Colors.TEAL,
-            ft.Colors.YELLOW,
-        ]
-        return colors_lookup[hash(user_name) % len(colors_lookup)]
-
 async def main(page: ft.Page):
+
+    def join_click(e):
+        if not user_name.value:
+            user_name.error_text = "Name cannot be blank!"
+            user_name.update()
+        else:
+            page.session.set("user_name", user_name.value)
+            join_dialog.open = False
+            page.pubsub.send_all(
+                Message(
+                    user=user_name.value, 
+                    text=f"{user_name.value} has joined the chat.", 
+                    message_type="login_message")
+            )
+            page.update()
 
     def on_message(message: Message):
         if message.message_type == "chat_message":
@@ -96,21 +62,6 @@ async def main(page: ft.Page):
                 text=f"Error getting AI response: {str(e)}",
                 message_type="error_message"
             ))
-
-    def join_click(e):
-        if not user_name.value:
-            user_name.error_text = "Name cannot be blank!"
-            user_name.update()
-        else:
-            page.session.set("user_name", user_name.value)
-            join_dialog.open = False
-            page.pubsub.send_all(
-                Message(
-                    user=user_name.value, 
-                    text=f"{user_name.value} has joined the chat.", 
-                    message_type="login_message")
-            )
-            page.update()
 
     # AIの初期化
     GOOGLE_API_KEY=os.environ['API_KEY']
