@@ -1,5 +1,6 @@
 import flet as ft
 import os
+import asyncio
 from dotenv import load_dotenv
 import google.generativeai as genai
 
@@ -57,25 +58,44 @@ class ChatMessage(ft.Row):
         ]
         return colors_lookup[hash(user_name) % len(colors_lookup)]
 
-def main(page: ft.Page):
+async def main(page: ft.Page):
 
     def on_message(message: Message):
         if message.message_type == "chat_message":
             m = ChatMessage(message)
         elif message.message_type == "login_message":
             m = ft.Text(message.text, italic=True, color=ft.Colors.BLACK45, size=12)
+        elif message.message_type == "error_message":
+            m = ft.Text(message.text, color=ft.Colors.ERROR)
         chat.controls.append(m)
         page.update()
 
-    def send_text(e):
+    async def send_text(e):
+        if not new_text.value.strip():
+            return
         page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
-        ai_response(new_text.value)
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, ai_response, new_text.value)
         new_text.value = ""
         page.update()
     
     def ai_response(message_to_ai):
-        response = ai_chat.send_message(message_to_ai)
-        page.pubsub.send_all(Message(user="AI", text=response.text, message_type="chat_message"))
+        try:
+            response = ai_chat.send_message(message_to_ai)
+            if response and response.text:
+                page.pubsub.send_all(Message(user="AI", text=response.text, message_type="chat_message"))
+            else:
+                page.pubsub.send_all(Message(
+                    user="System",
+                    text="AI response was empty",
+                    message_type="error_message"
+                ))
+        except Exception as e:
+            page.pubsub.send_all(Message(
+                user="System",
+                text=f"Error getting AI response: {str(e)}",
+                message_type="error_message"
+            ))
 
     def join_click(e):
         if not user_name.value:
