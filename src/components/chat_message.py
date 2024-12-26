@@ -1,6 +1,9 @@
 import flet as ft
 from models.message import Message
 
+from config import Config
+config = Config()
+
 class ChatMessage(ft.Row):
     def __init__(self, message: Message):
         super().__init__()
@@ -30,19 +33,4 @@ class ChatMessage(ft.Row):
         return user_name[:1].capitalize()
     
     def get_avatar_color(self, user_name: str):
-        colors_lookup = [
-            ft.Colors.AMBER,
-            ft.Colors.BLUE,
-            ft.Colors.BROWN,
-            ft.Colors.CYAN,
-            ft.Colors.GREEN,
-            ft.Colors.INDIGO,
-            ft.Colors.LIME,
-            ft.Colors.ORANGE,
-            ft.Colors.PINK,
-            ft.Colors.PURPLE,
-            ft.Colors.RED,
-            ft.Colors.TEAL,
-            ft.Colors.YELLOW,
-        ]
-        return colors_lookup[hash(user_name) % len(colors_lookup)]
+        return config.avatar_colors[hash(user_name) % len(colors_lookup)]
