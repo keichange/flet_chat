@@ -6,8 +6,11 @@ import google.generativeai as genai
 
 from models.message import Message
 from components.chat_message import ChatMessage
+from config import Config
 
 load_dotenv()
+config = Config()
+
 
 async def main(page: ft.Page):
 
@@ -39,6 +42,14 @@ async def main(page: ft.Page):
     async def send_text(e):
         if not new_text.value.strip():
             return
+        if len(new_text.value) > config.max_message_length:
+            page.pubsub.send_all(
+                Message("System",
+                        text="The text is too long. Please keep each message under 1000 characters.",
+                        message_type="error_message"
+                        )
+                        )
+            return
         page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, ai_response, new_text.value)
@@ -56,6 +67,7 @@ async def main(page: ft.Page):
                     text="AI response was empty",
                     message_type="error_message"
                 ))
+            
         except Exception as e:
             page.pubsub.send_all(Message(
                 user="System",
@@ -112,7 +124,7 @@ async def main(page: ft.Page):
                     on_click=send_text)])
     )
 
-    page.title = "Flet Chat"
+    page.title = config.app_title
     page.update()
 
 ft.app(main)
