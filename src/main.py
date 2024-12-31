@@ -40,7 +40,7 @@ async def main(page: ft.Page):
         page.update()
 
     async def send_text(e):
-        if not new_text.value.strip():
+        if not new_text.value.strip() or page.session.get("is_loading"):
             return
         if len(new_text.value) > config.max_message_length:
             page.pubsub.send_all(
@@ -58,7 +58,9 @@ async def main(page: ft.Page):
     
     def ai_response(message_to_ai):
         try:
+            progress_start()
             response = ai_chat.send_message(message_to_ai)
+            progress_end()
             if response and response.text:
                 page.pubsub.send_all(Message(user="AI", text=response.text, message_type="chat_message"))
             else:
@@ -69,11 +71,27 @@ async def main(page: ft.Page):
                 ))
             
         except Exception as e:
+            progress_end()
             page.pubsub.send_all(Message(
                 user="System",
                 text=f"Error getting AI response: {str(e)}",
                 message_type="error_message"
             ))
+
+    def progress_start():
+        page.session.set("is_loading", True)
+        update_loading_state()
+    
+    def progress_end():
+        page.session.set("is_loading", False)
+        update_loading_state()
+
+    def update_loading_state():
+        is_loading = page.session.get("is_loading")
+        send_button.visible = not is_loading
+        progress_ring.visible = is_loading
+        page.update()
+
 
     # AIの初期化
     GOOGLE_API_KEY=os.environ['API_KEY']
@@ -107,6 +125,16 @@ async def main(page: ft.Page):
         auto_scroll=True
     )
 
+    send_button = ft.IconButton(
+                    icon=ft.Icons.SEND_ROUNDED,
+                    tooltip="Send message",
+                    on_click=send_text,
+                    visible=True)
+    
+    progress_ring = ft.ProgressRing(
+                    visible=False
+                )
+
     page.add(
         ft.Container(
             content=chat,
@@ -118,12 +146,9 @@ async def main(page: ft.Page):
         ft.Row(
             [
                 new_text,
-                ft.IconButton(
-                    icon=ft.Icons.SEND_ROUNDED,
-                    tooltip="Send message",
-                    on_click=send_text)])
+                send_button,
+                progress_ring])
     )
-
     page.title = config.app_title
     page.update()
 
