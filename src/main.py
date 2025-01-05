@@ -2,9 +2,9 @@ import flet as ft
 import os
 import asyncio
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 from models.message import Message
+from service.ai_chat_service import AiSrevice
 from components.chat_message import ChatMessage
 from config import Config
 
@@ -13,7 +13,8 @@ config = Config()
 
 
 async def main(page: ft.Page):
-
+    GOOGLE_API_KEY=os.environ['API_KEY']
+    ai_service = AiSrevice(GOOGLE_API_KEY, 'gemini-1.5-flash')
     def join_click(e):
         if not user_name.value:
             user_name.error_text = "Name cannot be blank!"
@@ -51,27 +52,20 @@ async def main(page: ft.Page):
                         )
             return
         page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(None, ai_response, new_text.value)
+        ai_task = asyncio.create_task(get_ai_response(new_text.value))
         new_text.value = ""
         page.update()
-    
-    def ai_response(message_to_ai):
+
+    async def get_ai_response(message_to_ai):
         try:
             progress_start()
-            response = ai_chat.send_message(message_to_ai)
+            response = await ai_service.send_message(message_to_ai)
             progress_end()
-            if response and response.text:
-                page.pubsub.send_all(Message(user="AI", text=response.text, message_type="chat_message"))
-            else:
-                page.pubsub.send_all(Message(
-                    user="System",
-                    text="AI response was empty",
-                    message_type="error_message"
-                ))
-            
+
+            if response:
+                page.pubsub.send_all(response)
+
         except Exception as e:
-            progress_end()
             page.pubsub.send_all(Message(
                 user="System",
                 text=f"Error getting AI response: {str(e)}",
@@ -91,13 +85,6 @@ async def main(page: ft.Page):
         send_button.visible = not is_loading
         progress_ring.visible = is_loading
         page.update()
-
-
-    # AIの初期化
-    GOOGLE_API_KEY=os.environ['API_KEY']
-    genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    ai_chat = model.start_chat(history=[])
 
     # pubsubでイベントが発行されるとon_messageが呼ばれる
     page.pubsub.subscribe(on_message)
