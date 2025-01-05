@@ -3,7 +3,7 @@ import os
 import asyncio
 from dotenv import load_dotenv
 
-from models.message import Message
+from models.message import Message, MessageType
 from services.ai_chat_service import AiSrevice
 from components.chat_message import ChatMessage
 from config import Config
@@ -26,16 +26,16 @@ async def main(page: ft.Page):
                 Message(
                     user=user_name.value, 
                     text=f"{user_name.value} has joined the chat.", 
-                    message_type="login_message")
+                    message_type=MessageType.LOGIN_MESSAGE)
             )
             page.update()
 
     def on_message(message: Message):
-        if message.message_type == "chat_message":
+        if message.message_type == MessageType.CHAT_MESSAGE:
             m = ChatMessage(message)
-        elif message.message_type == "login_message":
+        elif message.message_type == MessageType.LOGIN_MESSAGE:
             m = ft.Text(message.text, italic=True, color=ft.Colors.BLACK45, size=12)
-        elif message.message_type == "error_message":
+        elif message.message_type == MessageType.ERROR_MESSAGE:
             m = ft.Text(message.text, color=ft.Colors.ERROR)
         chat.controls.append(m)
         page.update()
@@ -47,11 +47,11 @@ async def main(page: ft.Page):
             page.pubsub.send_all(
                 Message("System",
                         text="The text is too long. Please keep each message under 1000 characters.",
-                        message_type="error_message"
+                        message_type=MessageType.ERROR_MESSAGE
                         )
                         )
             return
-        page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
+        page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type=MessageType.CHAT_MESSAGE))
         ai_task = asyncio.create_task(get_ai_response(new_text.value))
         new_text.value = ""
         page.update()
@@ -70,7 +70,7 @@ async def main(page: ft.Page):
             page.pubsub.send_all(Message(
                 user="System",
                 text=f"Error getting AI response: {str(e)}",
-                message_type="error_message"
+                message_type=MessageType.ERROR_MESSAGE
             ))
 
     def progress_start():
