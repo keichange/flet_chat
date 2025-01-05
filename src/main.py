@@ -66,6 +66,7 @@ async def main(page: ft.Page):
                 page.pubsub.send_all(response)
 
         except Exception as e:
+            progress_end()
             page.pubsub.send_all(Message(
                 user="System",
                 text=f"Error getting AI response: {str(e)}",
