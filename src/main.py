@@ -1,82 +1,20 @@
 import flet as ft
 import os
+import asyncio
 from dotenv import load_dotenv
-import google.generativeai as genai
+
+from models.message import Message
+from services.ai_chat_service import AiSrevice
+from components.chat_message import ChatMessage
+from config import Config
 
 load_dotenv()
+config = Config()
 
-class Message():
-    def __init__(self, user: str, text: str, message_type: str):
-        self.user = user
-        self.text = text
-        self.message_type = message_type
 
-class ChatMessage(ft.Row):
-    def __init__(self, message: Message):
-        super().__init__()
-        self.vertical_alignment=ft.CrossAxisAlignment.START
-        self.controls=[
-            ft.CircleAvatar(
-                content=ft.Text(self.get_initials(message.user)),
-                color=ft.Colors.WHITE,
-                bgcolor=self.get_avatar_color(message.user),
-            ),
-            ft.Column(
-                [
-                    ft.Text(message.user, weight="bold"),
-                    ft.Markdown(
-                        message.text,
-                        code_style_sheet=ft.MarkdownStyleSheet.codeblock_alignment,
-                        selectable=True,
-                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
-                        ),
-                ],
-                tight=True,
-                spacing=5
-            ),
-        ]
-
-    def get_initials(self, user_name: str):
-        return user_name[:1].capitalize()
-    
-    def get_avatar_color(self, user_name: str):
-        colors_lookup = [
-            ft.Colors.AMBER,
-            ft.Colors.BLUE,
-            ft.Colors.BROWN,
-            ft.Colors.CYAN,
-            ft.Colors.GREEN,
-            ft.Colors.INDIGO,
-            ft.Colors.LIME,
-            ft.Colors.ORANGE,
-            ft.Colors.PINK,
-            ft.Colors.PURPLE,
-            ft.Colors.RED,
-            ft.Colors.TEAL,
-            ft.Colors.YELLOW,
-        ]
-        return colors_lookup[hash(user_name) % len(colors_lookup)]
-
-def main(page: ft.Page):
-
-    def on_message(message: Message):
-        if message.message_type == "chat_message":
-            m = ChatMessage(message)
-        elif message.message_type == "login_message":
-            m = ft.Text(message.text, italic=True, color=ft.Colors.BLACK45, size=12)
-        chat.controls.append(m)
-        page.update()
-
-    def send_text(e):
-        page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
-        ai_response(new_text.value)
-        new_text.value = ""
-        page.update()
-    
-    def ai_response(message_to_ai):
-        response = ai_chat.send_message(message_to_ai)
-        page.pubsub.send_all(Message(user="AI", text=response.text, message_type="chat_message"))
-
+async def main(page: ft.Page):
+    GOOGLE_API_KEY=os.environ['API_KEY']
+    ai_service = AiSrevice(GOOGLE_API_KEY, 'gemini-1.5-flash')
     def join_click(e):
         if not user_name.value:
             user_name.error_text = "Name cannot be blank!"
@@ -92,11 +30,61 @@ def main(page: ft.Page):
             )
             page.update()
 
-    # AIの初期化
-    GOOGLE_API_KEY=os.environ['API_KEY']
-    genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    ai_chat = model.start_chat(history=[])
+    def on_message(message: Message):
+        if message.message_type == "chat_message":
+            m = ChatMessage(message)
+        elif message.message_type == "login_message":
+            m = ft.Text(message.text, italic=True, color=ft.Colors.BLACK45, size=12)
+        elif message.message_type == "error_message":
+            m = ft.Text(message.text, color=ft.Colors.ERROR)
+        chat.controls.append(m)
+        page.update()
+
+    async def send_text(e):
+        if not new_text.value.strip() or page.session.get("is_loading"):
+            return
+        if len(new_text.value) > config.max_message_length:
+            page.pubsub.send_all(
+                Message("System",
+                        text="The text is too long. Please keep each message under 1000 characters.",
+                        message_type="error_message"
+                        )
+                        )
+            return
+        page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
+        ai_task = asyncio.create_task(get_ai_response(new_text.value))
+        new_text.value = ""
+        page.update()
+
+    async def get_ai_response(message_to_ai):
+        try:
+            progress_start()
+            response = await ai_service.send_message(message_to_ai)
+            progress_end()
+
+            if response:
+                page.pubsub.send_all(response)
+
+        except Exception as e:
+            page.pubsub.send_all(Message(
+                user="System",
+                text=f"Error getting AI response: {str(e)}",
+                message_type="error_message"
+            ))
+
+    def progress_start():
+        page.session.set("is_loading", True)
+        update_loading_state()
+    
+    def progress_end():
+        page.session.set("is_loading", False)
+        update_loading_state()
+
+    def update_loading_state():
+        is_loading = page.session.get("is_loading")
+        send_button.visible = not is_loading
+        progress_ring.visible = is_loading
+        page.update()
 
     # pubsubでイベントが発行されるとon_messageが呼ばれる
     page.pubsub.subscribe(on_message)
@@ -124,6 +112,16 @@ def main(page: ft.Page):
         auto_scroll=True
     )
 
+    send_button = ft.IconButton(
+                    icon=ft.Icons.SEND_ROUNDED,
+                    tooltip="Send message",
+                    on_click=send_text,
+                    visible=True)
+    
+    progress_ring = ft.ProgressRing(
+                    visible=False
+                )
+
     page.add(
         ft.Container(
             content=chat,
@@ -135,13 +133,10 @@ def main(page: ft.Page):
         ft.Row(
             [
                 new_text,
-                ft.IconButton(
-                    icon=ft.Icons.SEND_ROUNDED,
-                    tooltip="Send message",
-                    on_click=send_text)])
+                send_button,
+                progress_ring])
     )
-
-    page.title = "Flet Chat"
+    page.title = config.app_title
     page.update()
 
 ft.app(main)
