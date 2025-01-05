@@ -4,7 +4,7 @@ import asyncio
 from dotenv import load_dotenv
 
 from models.message import Message
-from service.ai_chat_service import AiSrevice
+from services.ai_chat_service import AiSrevice
 from components.chat_message import ChatMessage
 from config import Config
 
