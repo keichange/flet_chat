@@ -1,5 +1,6 @@
 import asyncio
 import flet as ft
+from pyodide.ffi import to_js
 
 class Message():
     def __init__(self, user: str, text: str, message_type: str):
@@ -49,9 +50,9 @@ class ChatMessage(ft.Row):
         return colors_lookup[hash(user_name) % len(colors_lookup)]
 
 def main(page: ft.Page):
-    # イベントループの設定
+    # Pyodideのイベントループを設定
     loop = asyncio.get_event_loop()
-    page.pubsub.loop = loop
+    page.pubsub.loop = to_js(loop)
 
     def on_message(message: Message):
         if message.message_type == "chat_message":
