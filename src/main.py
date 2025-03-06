@@ -1,7 +1,6 @@
-import asyncio
 import flet as ft
-from pyodide.ffi import to_js
 
+messages = []
 class Message():
     def __init__(self, user: str, text: str, message_type: str):
         self.user = user
@@ -50,22 +49,20 @@ class ChatMessage(ft.Row):
         return colors_lookup[hash(user_name) % len(colors_lookup)]
 
 def main(page: ft.Page):
-    # Pyodideのイベントループを設定
-    loop = asyncio.get_event_loop()
-    page.pubsub.loop = to_js(loop)
-
-    def on_message(message: Message):
+    def add_message(message: Message):
         if message.message_type == "chat_message":
-            m = ChatMessage(message)
+            chat_message = ChatMessage(message)
         elif message.message_type == "login_message":
-            m = ft.Text(message.text, italic=True, color=ft.Colors.BLACK45, size=12)
-        chat.controls.append(m)
+            chat_message = ft.Text(message.text, italic=True, color=ft.Colors.BLACK45, size=12)
+        chat.controls.append(chat_message)
         page.update()
 
-    page.pubsub.subscribe(on_message)
+    def send_message(message: Message):
+        messages.append(message)
+        add_message(message)
 
-    def send_text(e):
-        page.pubsub.send_all(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
+    def send_text_click(e):
+        send_message(Message(user=user_name.value, text=new_text.value, message_type="chat_message"))
         new_text.value = ""
         page.update()   
 
@@ -76,14 +73,12 @@ def main(page: ft.Page):
         else:
             page.session.set("user_name", user_name.value)
             join_dialog.open = False
-            page.pubsub.send_all(
-                Message(
-                    user=user_name.value, 
-                    text=f"{user_name.value} has joined the chat.", 
-                    message_type="login_message")
-            )
+            send_message(Message(
+                user=user_name.value,
+                text=f"{user_name.value} has joined the chat.",
+                message_type="login_message"
+            ))
             page.update()
-        print(join_dialog.open)
         
     user_name = ft.TextField(label="Enter your name", autofocus=True, on_submit=join_click)
       
@@ -97,7 +92,7 @@ def main(page: ft.Page):
     )
 
     page.overlay.append(join_dialog)
-    new_text = ft.TextField(shift_enter=True, on_submit=send_text)
+    new_text = ft.TextField(shift_enter=True, on_submit=send_text_click)
     chat = ft.ListView(
         expand=True,
         spacing=10,
@@ -118,7 +113,7 @@ def main(page: ft.Page):
                 ft.IconButton(
                     icon=ft.Icons.SEND_ROUNDED,
                     tooltip="Send message",
-                    on_click=send_text)])
+                    on_click=send_text_click)])
     )
 
     page.title = "Flet Chat"
